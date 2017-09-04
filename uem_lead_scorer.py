@@ -13,6 +13,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from keras.models import Sequential
 from keras.layers import Dense
 
+from multivariate_gaussian import MultivGauss
+
 web = './web/'
 navigation = './navigation/'
 user_list = navigation + 'user_list.txt'
@@ -69,45 +71,39 @@ def navigation_affinity(user):
 
 def train_set():
     users = get_users()
-    X = np.empty((len(users),2))
+    X = np.empty((len(users),3))
     Y = np.empty(len(users))
     i = 0
     for user in users:
-        X[i,0] = navigation_affinity(user)[0]
-        X[i,1] = navigation_affinity(user)[1] + navigation_affinity(user)[2]
+        X[i,:] = navigation_affinity(user)
         Y[i] = int(user[0])
         i = i+1
     return X,Y
 
+def split_set(x, y):
+    '''
+    y - boolean labels
+    '''
+    set_a = x[y.astype(bool)].copy()
+    set_b = x[(1 - y).astype(bool)].copy()
+    return set_a, set_b
+
 if __name__ == '__main__':
-    for user in get_users():
-        print(user)
-        print(raw_navigation_value(user))
-        print(navigation_affinity(user))
-    model = Sequential()
-    model.add(Dense(2, input_dim=2, kernel_initializer='normal', activation='relu'))
-#    model.add(Dense(3, input_dim=3, kernel_initializer='normal', activation='sigmoid'))
-#    model.add(Dense(3, input_dim=3, kernel_initializer='normal', activation='sigmoid'))
-
-    model.add(Dense(2, kernel_initializer='normal', activation='sigmoid'))
-    model.add(Dense(1, kernel_initializer='normal', activation='sigmoid'))
-    
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     X, Y = train_set()
-    hist = model.fit(X, Y, verbose = 0, epochs=10)
-    print(hist.history)
+    convs, no_convs = split_set(X, Y)
+    
+    p_convs = MultivGauss(convs)
+    p_convs.run()
+    p_no_convs = MultivGauss(no_convs)
+    p_no_convs.run()
     
 
-#    users = get_users()
-#    for user in users:
-#        print(user)
-#        print(navigation_affinity(user))
-#        print(model.predict(navigation_affinity(user)[np.newaxis,:]))
-        
-fig = plt.figure()
-ax = fig.add_subplot(111)
+    
+    X, Y = train_set()
+    
 
-ax.scatter(X[:,0], X[:,1], c='r', marker='o')
-
-ax.set_xlabel('X Label')
-ax.set_ylabel('Y Label')
+    test = []
+    for point in X:
+        test.append(p_convs.value(point) > p_no_convs.value(point))
+    Y_ = np.array(test)
+    print( 'Accuracy : ' + str((np.sum(((Y - Y_) == 0).astype(int)) / X.shape[0])*100) + ' over ' + str(X.shape[0]) + ' navigation cases' )
